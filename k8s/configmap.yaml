@@ -14,3 +14,9 @@ data:
   # NOTE: no Stripe keys here — both live in the `stripe-secret` Secret,
   # injected by `./pmm secret` (see k8s/secret.yaml). Nothing key-shaped
   # is committed to this repo.
+  #
+  # Stripe Connect destination for /withdraw (a transfer target, NOT a bank
+  # payout). Create a test connected account at
+  # https://dashboard.stripe.com/test/connect/accounts and paste its acct_...
+  # id here. Leave empty to keep withdrawals disabled (friendly error).
+  STRIPE_TRANSFER_DESTINATION: ""

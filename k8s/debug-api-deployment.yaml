@@ -29,6 +29,11 @@ spec:
                 secretKeyRef:
                   name: stripe-secret
                   key: STRIPE_SECRET_KEY
+            - name: STRIPE_TRANSFER_DESTINATION
+              valueFrom:
+                configMapKeyRef:
+                  name: paymemoney-config
+                  key: STRIPE_TRANSFER_DESTINATION
             # *** DEBUG KNOB ***
             # PAY_BREAK selects WHERE the intentional API-level bug lives.
             # Change it without editing this file:

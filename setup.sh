@@ -89,9 +89,9 @@ cat <<'EOF'
 
 All set. Next steps:
 
-  ./pmm secret sk_test_xxxxxxxx   # inject Stripe test key
-  ./pmm deploy                    # build + apply + restart pods
-  ./pmm ui                        # open http://localhost:8000 in your browser
+  ./pmm secret sk_test_xxx pk_test_yyy  # inject both Stripe test keys
+  ./pmm deploy                          # build + apply + restart pods
+  ./pmm ui                             # open http://localhost:8000 in your browser
 
 See README.md for the full guide (`./pmm help` lists all commands).
 EOF

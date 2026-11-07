@@ -15,7 +15,9 @@ How the Stripe REST API works (the 30-second version)
         That is why we pass auth=(STRIPE_KEY, "") to httpx.
 - Requests are application/x-www-form-urlencoded (NOT JSON). That is why we
   pass data={...} (a dict) instead of json={...} to httpx.
-- List-style params use bracket notation, e.g. payment_method_types[0]=card.
+- List-style params use bracket notation, e.g. line_items[0][quantity]=1.
+  (Newer Stripe API versions removed `payment_method_types` — allowed payment
+  methods are configured in the Dashboard instead.)
 - Amounts are ALWAYS integers in the smallest currency unit:
   $10.00 USD -> 1000 (cents), ¥1234 JPY -> 1234 (no minor unit).
 - Errors come back as JSON with "error": {"type": ..., "message": ...}
@@ -54,6 +56,12 @@ TRANSFER_DESTINATION = os.getenv("STRIPE_TRANSFER_DESTINATION", "")
 #                   (a SILENT wrong-amount bug — the sneakiest one)
 PAY_BREAK = os.getenv("PAY_BREAK", "")
 
+# Stripe now requires a return_url when confirming a PaymentIntent — where the
+# customer lands after redirect-based payment methods. We point it back at our
+# own web UI (service DNS name `paymemoney`, port 80). Override with
+# STRIPE_RETURN_URL if the app is ever exposed differently.
+RETURN_URL = os.getenv("STRIPE_RETURN_URL", "http://paymemoney/")
+
 app = FastAPI(title="paymemoney-pay")
 
 # --- Currency mapping ---------------------------------------------------------
@@ -66,19 +74,19 @@ CURRENCY_MAP = {"usd": "usd", "jpy": "jpy", "cny": "cny"}
 ZERO_DECIMAL = {"jpy"}
 
 # --- Payment methods ----------------------------------------------------------
-# A PaymentIntent can carry one or more "payment_method_types" — the ways the
-# customer is allowed to pay. We expose three buttons in the UI:
+# Our UI offers three buttons. The "allowed payment methods" for a
+# PaymentIntent are now configured in the Stripe Dashboard (the API no longer
+# accepts payment_method_types), so this map is only used to VALIDATE the
+# method name — each flow below passes a concrete pm_... instead.
 #
-#   card           -> ["card"]            real card payments (we simulate with a test PM)
-#   bank_transfer  -> ["customer_balance"] debit-style bank payment in Stripe test mode
-#   qr             -> ["card"]            QR is NOT a Stripe type! A QR code is just a
-#                                          way to *display* a payment request, so we
-#                                          reuse the card flow and the web pod renders
-#                                          the QR image of the resulting intent id.
+#   card           -> real card via Stripe.js tokenization in the browser
+#   bank_transfer  -> us_bank_account PaymentMethod created server-side
+#   qr             -> a Payment Link (hosted checkout); the web pod QR-encodes
+#                     the URL — QR is a display format, not a Stripe type.
 METHOD_MAP = {
     "card": ["card"],
-    "bank_transfer": ["customer_balance"],
-    "qr": ["card"],
+    "bank_transfer": ["us_bank_account"],
+    "qr": ["payment_link"],
 }
 
 
@@ -162,11 +170,16 @@ def pay(req: PayRequest) -> dict:
       -> processing -> succeeded  (or -> canceled / requires_payment_method on failure)
 
     Fields we send (all form-encoded):
-      amount                  smallest currency unit, as a string
-      currency                ISO 4217 lowercase
-      payment_method_types[0] which payment methods are allowed ([] = all enabled)
-      payment_method          which concrete method to use (pm_... id)
-      confirm                 "true" = charge immediately, don't just create the intent
+      amount           smallest currency unit, as a string
+      currency         ISO 4217 lowercase
+      payment_method   which concrete method to use (pm_... id)
+      confirm          "true" = charge immediately, don't just create the intent
+
+    NOTE: newer Stripe API versions removed `payment_method_types` — allowed
+    payment methods now come from Dashboard settings via "automatic payment
+    methods". Some Dashboard-enabled methods can redirect the customer, which
+    would need a return_url; we disable redirects since card/ACH don't need
+    them (see automatic_payment_methods below).
     """
     currency = CURRENCY_MAP.get(req.currency.lower())
     pmt_types = METHOD_MAP.get(req.method)
@@ -176,12 +189,17 @@ def pay(req: PayRequest) -> dict:
     data = {
         "amount": str(to_smallest_unit(req.amount, currency)),
         "currency": currency,
-        "payment_method_types[0]": pmt_types[0],
         # pm_card_visa is Stripe's built-in TEST payment method that always
         # succeeds — no real card number needed in test mode.
         # Real cards would come from Stripe.js / Payment Element on the page.
         "payment_method": "pm_card_visa",
         "confirm": "true",
+        # New-API requirement: Dashboard-managed payment methods may include
+        # redirect-based ones; we accept only non-redirecting methods.
+        "automatic_payment_methods[enabled]": "true",
+        "automatic_payment_methods[allow_redirects]": "never",
+        # Stripe requires this at confirm time even when redirects are off.
+        "return_url": RETURN_URL,
     }
     # POST /v1/payment_intents  ->  creates the intent and, because confirm=true,
     # immediately tries to charge it. Response contains "id": "pi_...",
@@ -219,7 +237,6 @@ def pay_card(req: CardPayRequest) -> dict:
     leaving the browser->Stripe channel. This endpoint only confirms:
 
       POST /v1/payment_intents
-        payment_method_types[0]=card
         payment_method=pm_...
         confirm=true
 
@@ -233,9 +250,11 @@ def pay_card(req: CardPayRequest) -> dict:
     return {"calls": [stripe_call("/payment_intents", {
         "amount": str(to_smallest_unit(req.amount, currency)),
         "currency": currency,
-        "payment_method_types[0]": "card",
         "payment_method": req.payment_method,
         "confirm": "true",
+        "automatic_payment_methods[enabled]": "true",
+        "automatic_payment_methods[allow_redirects]": "never",
+        "return_url": RETURN_URL,
     })]}
 
 
@@ -276,9 +295,11 @@ def pay_bank(req: BankPayRequest) -> dict:
     calls.append(stripe_call("/payment_intents", {
         "amount": str(to_smallest_unit(req.amount, currency)),
         "currency": currency,
-        "payment_method_types[0]": "us_bank_account",
         "payment_method": pm["id"],
         "confirm": "true",
+        "automatic_payment_methods[enabled]": "true",
+        "automatic_payment_methods[allow_redirects]": "never",
+        "return_url": RETURN_URL,
     }))
     return {"calls": calls}
 

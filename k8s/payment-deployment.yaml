@@ -31,10 +31,13 @@ spec:
                 secretKeyRef:
                   name: stripe-secret
                   key: STRIPE_SECRET_KEY
-            # Optional: a Stripe Connect destination account (acct_...) for withdrawals.
-            # Leave empty until you create one in the Stripe dashboard (test mode).
+            # Stripe Connect destination (acct_...) for withdrawals — set in
+            # k8s/configmap.yaml. Empty = withdrawals return a friendly error.
             - name: STRIPE_TRANSFER_DESTINATION
-              value: ""
+              valueFrom:
+                configMapKeyRef:
+                  name: paymemoney-config
+                  key: STRIPE_TRANSFER_DESTINATION
           livenessProbe:
             httpGet:
               path: /health

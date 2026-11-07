@@ -80,7 +80,7 @@ Troubleshooting path: payment fails → `kubectl get pods` (Running!) →
 find which layer is lying.
 
 Note: with an invalid/missing Stripe key, API bugs can be masked — Stripe
-validates the key before the body. Set a real `sk_test_` key (`./pmm secret`)
+validates the key before the body. Set real test keys (`./pmm secret sk_test_... pk_test_...`)
 to see encoding/routing bugs surface distinctly.
 
 **QR** — the payment pod calls `POST /v1/payment_links` with an inline price,
@@ -267,7 +267,7 @@ kubectl delete -k k8s && kubectl delete namespace paymemoney --ignore-not-found 
   && minikube stop
 ```
 
-To start again later: `./setup.sh` → `./pmm secret ...` → `./pmm deploy` → `./pmm port-forward`.
+To start again later: `./setup.sh` → `./pmm secret sk_test_... pk_test_...` → `./pmm deploy` → `./pmm ui`.
 (`minikube stop` preserves the VM disk, so redeploying after a restart is fast.)
 
 ## Project layout

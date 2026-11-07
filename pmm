@@ -2,7 +2,7 @@
 # pmm — paymemoney CLI. Replaces the old Makefile.
 #
 #   pmm deploy      build image -> load into minikube -> apply k8s -> restart pods
-#   pmm secret sk_... [pk_...]  inject Stripe keys (never written to a repo file)
+#   pmm secret sk_... pk_...  inject both Stripe keys (never written to a repo file)
 #   pmm ui          background port-forward + open browser
 #   pmm ui-stop     stop the background port-forward
 #   pmm port-forward  foreground port-forward (localhost:8000)
@@ -40,9 +40,6 @@ case "$cmd" in
   load)   minikube image load "$IMAGE" ;;
 
   secret)
-    # accepts any mix of: sk_...  pk_...  STRIPE_SECRET_KEY=..  STRIPE_PUBLISHABLE_KEY=..
-    # e.g.  ./pmm secret sk_test_xxx                 (secret key only)
-    #       ./pmm secret sk_test_xxx pk_test_yyy      (both keys)
     SK=""; PK=""
     for a in "$@"; do
       case "$a" in
@@ -50,18 +47,27 @@ case "$cmd" in
         STRIPE_PUBLISHABLE_KEY=*)     PK="${a#*=}" ;;
         sk_*)                         SK="$a" ;;
         pk_*)                         PK="$a" ;;
-        *) echo "unrecognized arg: $a (want sk_... and/or pk_...)" >&2; exit 1 ;;
+        *) echo "unrecognized arg: $a (want sk_... and pk_...)" >&2; exit 1 ;;
       esac
     done
-    [[ -z "$SK" && -z "$PK" ]] && { echo "usage: ./pmm secret sk_test_xxx [pk_test_yyy]" >&2; exit 1; }
-    LITERALS=()
-    [[ -n "$SK" ]] && LITERALS+=(--from-literal=STRIPE_SECRET_KEY="$SK")
-    [[ -n "$PK" ]] && LITERALS+=(--from-literal=STRIPE_PUBLISHABLE_KEY="$PK")
+    [[ -z "$SK" || -z "$PK" ]] && {
+      echo "usage: ./pmm secret sk_test_xxxxxxxx pk_test_yyyyyy" >&2
+      echo "  (both keys required — sk_ for the payment pods, pk_ for the web pod's card form)" >&2
+      exit 1
+    }
+    # namespace may not exist yet if `pmm secret` runs before the first `pmm deploy`
+    kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
     kubectl create secret generic stripe-secret -n "$NAMESPACE" \
-      "${LITERALS[@]}" --dry-run=client -o yaml | kubectl apply -f -
-    # restart every pod that consumes the secret (web pod uses pk_, pay pods use sk_)
-    kubectl rollout restart deployment/paymemoney deployment/payment \
-      deployment/debug-api deployment/debug-k8s -n "$NAMESPACE"
+      --from-literal=STRIPE_SECRET_KEY="$SK" \
+      --from-literal=STRIPE_PUBLISHABLE_KEY="$PK" \
+      --dry-run=client -o yaml | kubectl apply -f -
+    # restart every pod that consumes the secret (web pod uses pk_, pay pods use sk_);
+    # skip silently if run before the first `pmm deploy` (no deployments yet)
+    EXISTING=$(kubectl get deploy -n "$NAMESPACE" -o name 2>/dev/null \
+      | grep -E '/(paymemoney|payment|debug-api|debug-k8s)$' || true)
+    if [[ -n "$EXISTING" ]]; then
+      kubectl rollout restart $EXISTING -n "$NAMESPACE"
+    fi
     ;;
 
   test)
@@ -94,11 +100,33 @@ case "$cmd" in
     ;;
 
   ui)
+    # already serving? just reopen the browser
+    if curl -sf --max-time 2 "http://localhost:$LOCAL_PORT/health" >/dev/null; then
+      open "http://localhost:$LOCAL_PORT"
+      echo "already running — opened http://localhost:$LOCAL_PORT"
+      exit 0
+    fi
+    # something is bound but not serving (dead forward) — clear it first
+    pkill -f "port-forward.*svc/paymemoney" 2>/dev/null || true
+    sleep 1
     nohup kubectl port-forward -n "$NAMESPACE" svc/paymemoney "$LOCAL_PORT":80 \
       >/tmp/paymemoney-portforward.log 2>&1 &
-    sleep 2
-    open "http://localhost:$LOCAL_PORT"
-    echo "opened http://localhost:$LOCAL_PORT — stop the forward with: pmm ui-stop"
+    # wait for /health instead of a fixed sleep — pod may still be starting
+    ok=""
+    for _ in $(seq 1 30); do
+      if curl -sf --max-time 1 "http://localhost:$LOCAL_PORT/health" >/dev/null; then
+        ok=1; break
+      fi
+      sleep 0.5
+    done
+    if [[ -n "$ok" ]]; then
+      open "http://localhost:$LOCAL_PORT"
+      echo "opened http://localhost:$LOCAL_PORT — stop the forward with: pmm ui-stop"
+    else
+      echo "port-forward failed to come up — last log lines:" >&2
+      tail -5 /tmp/paymemoney-portforward.log >&2
+      exit 1
+    fi
     ;;
 
   ui-stop)

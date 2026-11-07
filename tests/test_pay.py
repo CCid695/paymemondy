@@ -59,7 +59,7 @@ def test_pay_sends_expected_stripe_fields(monkeypatch):
     assert captured["path"] == "/payment_intents"
     assert captured["data"]["amount"] == "1234"          # cents, as string
     assert captured["data"]["currency"] == "usd"
-    assert captured["data"]["payment_method_types[0]"] == "card"
+    assert "payment_method_types" not in captured["data"]  # removed in new API versions
     assert captured["data"]["confirm"] == "true"
     assert captured["data"]["payment_method"] == "pm_card_visa"
 
@@ -107,7 +107,7 @@ def test_pay_card_confirms_with_pm(monkeypatch):
     # exactly ONE Stripe call — no raw card data ever reaches this pod
     assert [c[0] for c in calls] == ["/payment_intents"]
     assert calls[0][1]["payment_method"] == "pm_visa123"
-    assert calls[0][1]["payment_method_types[0]"] == "card"
+    assert "payment_method_types" not in calls[0][1]  # Stripe now uses Dashboard settings
     assert calls[0][1]["confirm"] == "true"
 
 
@@ -133,7 +133,8 @@ def test_pay_bank_uses_us_bank_account(monkeypatch):
     assert resp.json()["calls"][-1]["response"]["status"] == "requires_action"
     assert calls[0][1]["type"] == "us_bank_account"
     assert calls[0][1]["us_bank_account[routing_number]"] == "110000000"
-    assert calls[1][1]["payment_method_types[0]"] == "us_bank_account"
+    assert "payment_method_types" not in calls[1][1]
+    assert calls[1][1]["payment_method"] == "pm_bank"
 
 
 def test_pay_qr_creates_payment_link(monkeypatch):
