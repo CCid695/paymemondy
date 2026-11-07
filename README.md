@@ -34,9 +34,8 @@ Python/FastAPI backend, Stripe as the payment provider via its REST API.
 | Page | What it does |
 |---|---|
 | `/` | Amount + currency + **Mode** dropdown (normal / debug API / debug K8s); Payment / Refund / Withdrawal |
-| `/pay` | Drilldown: pick **QR Code**, **Credit Card**, or **Bank Transfer** (carries the mode) |
+| `/pay` | Drilldown: pick **QR Code** or **Credit Card** (carries the mode) |
 | `/pay/card` | Stripe.js Card Element tokenizes in-browser → posts only `pm_...` → PaymentIntent confirm |
-| `/pay/bank` | Bank account form → `us_bank_account` PaymentMethod + intent |
 | `/pay/qr` | Creates a Stripe **Payment Link**, renders it as a scannable QR |
 | `/refund` | Paste a `pi_...` PaymentIntent id and refund it |
 | `/withdraw` | Send funds out via a Stripe transfer (needs a Connect account) |
@@ -104,10 +103,10 @@ Both keys are injected with `./pmm secret` — nothing key-shaped is committed
 to the repo (not even the publishable one). Without `pk_`, only the card page
 is affected; everything else works.
 
-**Bank transfer** — collects holder name + US routing/account number;
-creates a `us_bank_account` PaymentMethod. Bank debits are not instant:
-Stripe returns `requires_action` while the debit is verified/authorized —
-that is expected, not an error.
+Bank transfer was removed: this Stripe account has no ACH Direct Debit
+capability (`us_bank_account` isn't even listed in its payment method
+configurations). If you ever activate ACH, the flow is `us_bank_account`
+PaymentMethod → PaymentIntent — expect `requires_action`, not instant success.
 
 ## Prerequisites
 
@@ -190,11 +189,10 @@ Check everything is healthy:
 - **Payment** — enter an amount + currency → **Payment** → pick a method:
   - **QR Code** → get a scannable QR of a real Stripe Payment Link
   - **Credit Card** → Stripe.js Card Element (PCI-safe); test card `4242 4242 4242 4242`, any future exp, any cvc
-  - **Bank Transfer** → routing `110000000`, account `000123456789` fixed in the form (Stripe test mode rejects other account numbers); expect `requires_action` (bank debits verify asynchronously)
   
   The result page shows a **request/response transcript** — for every Stripe
   call it renders `sent to Stripe` (exact form fields) and `Stripe responded`
-  (raw JSON). Bank transfer shows both calls (PaymentMethod + PaymentIntent).
+  (raw JSON). Card shows one call; QR shows the `/payment_links` call.
 - **Refund** — copy the `pi_...` id from a payment result → **Refund** → paste it.
 - **Withdrawal** — needs `STRIPE_TRANSFER_DESTINATION` set to a Stripe Connect
   destination account (`acct_...`, create one in the Stripe dashboard test mode):
@@ -277,11 +275,11 @@ To start again later: `./setup.sh` → `./pmm secret sk_test_... pk_test_...` �
 ```
 app/
   main.py            # web pod: HTML pages + proxy to payment pod
-  pay.py             # payment pod: Stripe REST calls (pay/card/bank/qr/refund/withdraw)
+  pay.py             # payment pod: Stripe REST calls (pay/card/qr/refund/withdraw)
   __init__.py
 k8s/
   namespace.yaml     # namespace: paymemoney
-  configmap.yaml     # APP_NAME, PAYMENT_SERVICE_URL, STRIPE_PUBLISHABLE_KEY
+  configmap.yaml     # APP_NAME, PAYMENT_SERVICE_URL, STRIPE_TRANSFER_DESTINATION
   deployment.yaml    # web pod (paymemoney, 2 replicas, NodePort 30081)
   service.yaml       # web service
   payment-deployment.yaml  # payment pod (1 replica, same image)

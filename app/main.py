@@ -2,7 +2,7 @@
 
 Flow:
   /                -> enter amount + currency, pick Payment / Refund / Withdrawal
-  /pay             -> drilldown: choose QR / credit card / bank transfer
+  /pay             -> drilldown: choose QR / credit card
   /refund, /withdraw -> simple forms that call the payment pod
 
 This pod never talks to Stripe directly. It forwards to the payment pod
@@ -202,7 +202,7 @@ def pay_methods(amount: float, currency: str, mode: str = "normal") -> HTMLRespo
     """Drilldown page: pick how to pay.
 
     QR needs no input -> POST straight to /pay/qr.
-    Card and bank transfer need forms -> GET pages that collect the details.
+    Card needs a form -> GET page that collects the details (Stripe.js).
     `mode` selects which payment backend (normal / debug-api / debug-k8s).
     """
     hidden = (
@@ -222,7 +222,6 @@ def pay_methods(amount: float, currency: str, mode: str = "normal") -> HTMLRespo
           <form method="post" action="/pay/qr">{hidden}
             <button type="submit">QR Code</button></form>
           <a class="btn" href="/pay/card?amount={amount}&currency={currency}&mode={mode}">Credit Card</a>
-          <a class="btn" href="/pay/bank?amount={amount}&currency={currency}&mode={mode}">Bank Transfer</a>
         </div>
         <a class="btn ghost" href="/">Back</a>
         """
@@ -302,47 +301,6 @@ def card_pay(
     result = call_pay("/pay/card", {
         "amount": amount, "currency": currency,
         "payment_method": payment_method,
-    }, mode)
-    return page("Payment result", result_html(result))
-
-
-@app.get("/pay/bank", response_class=HTMLResponse)
-def bank_form(amount: float, currency: str, mode: str = "normal") -> HTMLResponse:
-    """Bank transfer form — US bank account (ACH-style debit via Stripe)."""
-    return page(
-        f"Pay {amount} {currency.upper()} by bank transfer",
-        f"""
-        <h1>Bank Transfer</h1>
-        <div class="sub">US bank account (ACH debit). Stripe test mode only
-        accepts canned account numbers, so they are fixed — do not edit.</div>
-        <form method="post" action="/pay/bank">
-          <input type="hidden" name="amount" value="{amount}">
-          <input type="hidden" name="currency" value="{currency}">
-          <input type="hidden" name="mode" value="{mode}">
-          <input type="hidden" name="routing_number" value="110000000">
-          <input type="hidden" name="account_number" value="000123456789">
-          <label>Account holder name</label>
-          <input name="name" placeholder="Jane Doe" required>
-          <label>Routing number (fixed test value)</label>
-          <input value="110000000" disabled>
-          <label>Account number (fixed test value)</label>
-          <input value="000123456789" disabled>
-          <button type="submit">Pay</button>
-        </form>
-        <a class="btn ghost" href="/pay?amount={amount}&currency={currency}&mode={mode}">Back</a>
-        """,
-    )
-
-
-@app.post("/pay/bank", response_class=HTMLResponse)
-def bank_pay(
-    amount: float = Form(...), currency: str = Form(...),
-    name: str = Form(...), routing_number: str = Form(...),
-    account_number: str = Form(...), mode: str = Form("normal"),
-):
-    result = call_pay("/pay/bank", {
-        "amount": amount, "currency": currency, "name": name,
-        "routing_number": routing_number, "account_number": account_number,
     }, mode)
     return page("Payment result", result_html(result))
 

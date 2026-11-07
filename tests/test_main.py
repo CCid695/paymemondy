@@ -37,7 +37,7 @@ def test_pay_drilldown_in_debug_mode_shows_hint_and_carries_mode():
     html = client.get("/pay?amount=10&currency=usd&mode=debug-k8s").text
     assert "intentionally broken" in html
     assert 'name="mode" value="debug-k8s"' in html
-    assert "mode=debug-k8s" in html  # carried into card/bank links
+    assert "mode=debug-k8s" in html  # carried into card links
 
 
 def test_qr_pay_passes_mode_to_backend(monkeypatch):
@@ -59,12 +59,13 @@ def test_home_shows_form_and_currencies():
     assert 'href="/refund"' in html and 'href="/withdraw"' in html
 
 
-def test_pay_drilldown_lists_three_methods():
+def test_pay_drilldown_lists_methods():
     html = client.get("/pay?amount=10&currency=usd").text
     assert "Pay 10.0 USD" in html
     assert 'action="/pay/qr"' in html
     assert "/pay/card?amount=10.0&currency=usd" in html
-    assert "/pay/bank?amount=10.0&currency=usd" in html
+    # bank transfer was removed — this Stripe account has no ACH capability
+    assert "/pay/bank" not in html
 
 
 def test_card_form_uses_stripe_js(monkeypatch):
@@ -82,12 +83,6 @@ def test_card_form_warns_without_publishable_key(monkeypatch):
     monkeypatch.setattr(main_mod, "STRIPE_PK", "")
     html = client.get("/pay/card?amount=10&currency=usd").text
     assert "STRIPE_PUBLISHABLE_KEY is not set" in html
-
-
-def test_bank_form_renders():
-    html = client.get("/pay/bank?amount=10&currency=usd").text
-    assert 'name="routing_number"' in html and 'name="account_number"' in html
-    assert 'action="/pay/bank"' in html
 
 
 def test_refund_form():
@@ -129,21 +124,6 @@ def test_card_pay_forwards_pm_id(monkeypatch):
         "amount": 10.0, "currency": "usd", "payment_method": "pm_abc123",
     }
     assert "pi_x" in resp.text
-
-
-def test_bank_pay_forwards_bank_fields(monkeypatch):
-    captured = {}
-    monkeypatch.setattr(
-        main_mod, "call_pay",
-        lambda path, payload, mode="normal": captured.update(path=path, payload=payload) or {"id": "pi_y"},
-    )
-    resp = client.post("/pay/bank", data={
-        "amount": "10", "currency": "usd", "name": "Jane",
-        "routing_number": "110000000", "account_number": "000123456789",
-    })
-    assert captured["path"] == "/pay/bank"
-    assert captured["payload"]["routing_number"] == "110000000"
-    assert "pi_y" in resp.text
 
 
 def test_refund_post(monkeypatch):

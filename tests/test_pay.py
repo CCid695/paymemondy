@@ -79,7 +79,7 @@ def test_pay_rmb_maps_to_cny_and_jpy_stays_whole(monkeypatch):
     assert captured["data"]["amount"] == "500"  # no *100 for jpy
 
 
-# --- /pay/card, /pay/bank, /pay/qr (two-step Stripe flows) ---------------------
+# --- /pay/card, /pay/qr (Stripe flows) ----------------------------------------
 
 def fake_stripe_sequence(returns):
     """stripe_post fake that returns queued responses and records calls."""
@@ -116,25 +116,6 @@ def test_pay_card_rejects_bad_currency(monkeypatch):
         "amount": 10, "currency": "eur", "payment_method": "pm_x",
     })
     assert "unsupported" in resp.json()["error"]
-
-
-def test_pay_bank_uses_us_bank_account(monkeypatch):
-    calls, fake = fake_stripe_sequence([
-        {"id": "pm_bank"},
-        {"id": "pi_bank", "status": "requires_action"},
-    ])
-    monkeypatch.setattr(pay_mod, "stripe_post", fake)
-
-    resp = client.post("/pay/bank", json={
-        "amount": 20, "currency": "usd", "name": "Jane Doe",
-        "routing_number": "110000000", "account_number": "000123456789",
-    })
-
-    assert resp.json()["calls"][-1]["response"]["status"] == "requires_action"
-    assert calls[0][1]["type"] == "us_bank_account"
-    assert calls[0][1]["us_bank_account[routing_number]"] == "110000000"
-    assert "payment_method_types" not in calls[1][1]
-    assert calls[1][1]["payment_method"] == "pm_bank"
 
 
 def test_pay_qr_creates_payment_link(monkeypatch):

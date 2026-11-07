@@ -80,12 +80,11 @@ ZERO_DECIMAL = {"jpy"}
 # method name — each flow below passes a concrete pm_... instead.
 #
 #   card           -> real card via Stripe.js tokenization in the browser
-#   bank_transfer  -> us_bank_account PaymentMethod created server-side
 #   qr             -> a Payment Link (hosted checkout); the web pod QR-encodes
 #                     the URL — QR is a display format, not a Stripe type.
+# (bank_transfer was removed: this Stripe account has no ACH capability.)
 METHOD_MAP = {
     "card": ["card"],
-    "bank_transfer": ["us_bank_account"],
     "qr": ["payment_link"],
 }
 
@@ -153,7 +152,7 @@ def stripe_call(path: str, data: dict) -> dict:
 class PayRequest(BaseModel):
     amount: float      # human units, e.g. 10.50
     currency: str      # our codes: usd | jpy | cny
-    method: str        # our codes: qr | card | bank_transfer
+    method: str        # our codes: qr | card
 
 
 @app.get("/health")
@@ -214,8 +213,6 @@ def pay(req: PayRequest) -> dict:
 # tokenizes the card with Stripe.js (publishable key) and sends us only a
 # PaymentMethod id (pm_...). Our job is just to confirm a PaymentIntent
 # with that pm_... — one Stripe call.
-# Bank transfer details are not cardholder data, so they can come through
-# the API (us_bank_account), though production would use Financial Connections.
 # ---------------------------------------------------------------------------
 
 
@@ -256,54 +253,6 @@ def pay_card(req: CardPayRequest) -> dict:
         "automatic_payment_methods[allow_redirects]": "never",
         "return_url": RETURN_URL,
     })]}
-
-
-class BankPayRequest(MoneyRequest):
-    name: str            # account holder name
-    routing_number: str  # US bank routing number
-    account_number: str
-
-
-@app.post("/pay/bank")
-def pay_bank(req: BankPayRequest) -> dict:
-    """Initiate a US bank-account (ACH-style) payment.
-
-    Step 1: POST /v1/payment_methods with type=us_bank_account.
-    Test values Stripe accepts: routing 110000000 + account 000123456789
-    (test mode only allows Stripe's canned account numbers — arbitrary ones
-    are rejected with payment_method_invalid_parameter_testmode).
-
-    Step 2: confirm a PaymentIntent allowing us_bank_account.
-    Unlike a card, a bank debit is NOT instant — Stripe responds with
-    status "requires_action" and the customer must verify/authorize the
-    debit (in live mode via Financial Connections / micro-deposits).
-    That is expected behaviour, not a bug.
-    """
-    currency = CURRENCY_MAP.get(req.currency.lower())
-    if not currency:
-        return {"error": f"unsupported currency: {req.currency}"}
-
-    # Transcript of BOTH Stripe calls — the PM creation and the intent confirm.
-    calls = [stripe_call("/payment_methods", {
-        "type": "us_bank_account",
-        "us_bank_account[routing_number]": req.routing_number,
-        "us_bank_account[account_number]": req.account_number,
-        "billing_details[name]": req.name,
-    })]
-    pm = calls[0]["response"]
-    if pm.get("error") or not pm.get("id"):
-        return {"calls": calls}  # bank details rejected — stop here
-
-    calls.append(stripe_call("/payment_intents", {
-        "amount": str(to_smallest_unit(req.amount, currency)),
-        "currency": currency,
-        "payment_method": pm["id"],
-        "confirm": "true",
-        "automatic_payment_methods[enabled]": "true",
-        "automatic_payment_methods[allow_redirects]": "never",
-        "return_url": RETURN_URL,
-    }))
-    return {"calls": calls}
 
 
 @app.post("/pay/qr")
