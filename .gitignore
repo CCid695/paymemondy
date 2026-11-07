@@ -1,0 +1,10 @@
+# Local secrets — never commit real keys
+.env
+*.local.yaml
+secrets*.yaml
+!k8s/secret.yaml
+
+# Python virtualenv for local dev/tests
+.venv/
+.pytest_cache/
+__pycache__/

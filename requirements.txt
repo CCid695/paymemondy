@@ -1,0 +1,5 @@
+fastapi==0.128.8
+uvicorn==0.39.0
+httpx==0.28.1
+segno==1.6.6
+python-multipart==0.0.20

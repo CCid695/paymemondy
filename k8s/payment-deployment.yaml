@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment
+  namespace: paymemoney
+  labels:
+    app.kubernetes.io/name: payment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payment
+    spec:
+      containers:
+        - name: payment
+          image: paymemoney:dev
+          imagePullPolicy: IfNotPresent
+          # Same image as the web pod, different uvicorn target:
+          # app/pay.py is the Stripe-calling backend.
+          command: ["uvicorn", "app.pay:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secret
+                  key: STRIPE_SECRET_KEY
+            # Optional: a Stripe Connect destination account (acct_...) for withdrawals.
+            # Leave empty until you create one in the Stripe dashboard (test mode).
+            - name: STRIPE_TRANSFER_DESTINATION
+              value: ""
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop:
+                - ALL

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: paymemoney-config
+  namespace: paymemoney
+  labels:
+    app.kubernetes.io/name: paymemoney
+data:
+  APP_NAME: "paymemoney"
+  ENVIRONMENT: "local"
+  # DNS name of the payment pod's Service (see payment-service.yaml).
+  # Kubernetes resolves short names inside the same namespace.
+  PAYMENT_SERVICE_URL: "http://payment"
+  # Stripe PUBLISHABLE key (pk_test_...) — public by design, used by Stripe.js
+  # in the browser to tokenize cards. Get it next to the secret key at
+  # https://dashboard.stripe.com/test/apikeys
+  STRIPE_PUBLISHABLE_KEY: "pk_test_REPLACE_ME"

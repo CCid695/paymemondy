@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: debug-api
+  namespace: paymemoney
+  labels:
+    app.kubernetes.io/name: debug-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: debug-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: debug-api
+    spec:
+      containers:
+        - name: debug-api
+          image: paymemoney:dev
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "app.pay:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secret
+                  key: STRIPE_SECRET_KEY
+            # *** DEBUG KNOB ***
+            # PAY_BREAK selects WHERE the intentional API-level bug lives.
+            # Change it without editing this file:
+            #   make break-api TARGET=json-body|wrong-path|no-auth|bad-amount|none
+            # Options are documented in app/pay.py next to PAY_BREAK.
+            - name: PAY_BREAK
+              value: "json-body"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop:
+                - ALL

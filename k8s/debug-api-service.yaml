@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: debug-api
+  namespace: paymemoney
+  labels:
+    app.kubernetes.io/name: debug-api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: debug-api   # matches pod labels — this one is healthy
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
