@@ -29,7 +29,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 # Secret key comes from the k8s Secret `stripe-secret` (see k8s/secret.yaml,
-# created via `make secret`). Test keys start with sk_test_ and cannot move
+# created via `./pmm secret`). Test keys start with sk_test_ and cannot move
 # real money. Restricted keys start with rk_test_. Never commit a real key.
 STRIPE_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_API = "https://api.stripe.com/v1"
@@ -43,7 +43,7 @@ STRIPE_API = "https://api.stripe.com/v1"
 TRANSFER_DESTINATION = os.getenv("STRIPE_TRANSFER_DESTINATION", "")
 
 # DEBUG KNOB — only non-empty on the `debug-api` pod
-# (see k8s/debug-api-deployment.yaml and `make break-api TARGET=...`).
+# (see k8s/debug-api-deployment.yaml and `./pmm break-api ...`).
 # Pick WHERE the API-level bug lives; "" means healthy.
 #   ""           -> normal, everything works
 #   "json-body"  -> stripe_post sends json= instead of form-encoded data=

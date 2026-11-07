@@ -10,8 +10,8 @@ spec:
   selector:
     # This file is the CORRECT config — the pod label is `debug-k8s`.
     # K8s-level bugs are introduced on the LIVE cluster by `break-k8s.sh`
-    # (`make break-k8s TARGET=...`), never committed here, so `make deploy`
-    # always restores a healthy baseline and `make break-k8s TARGET=reset`
+    # (`./pmm break-k8s ...`), never committed here, so `./pmm deploy`
+    # always restores a healthy baseline and `./pmm break-k8s reset`
     # heals whatever you broke.
     app.kubernetes.io/name: debug-k8s
   ports:

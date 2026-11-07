@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# pmm — paymemoney CLI. Replaces the old Makefile.
+#
+#   pmm deploy      build image -> load into minikube -> apply k8s -> restart pods
+#   pmm secret KEY  inject Stripe secret key (never written to a repo file)
+#   pmm ui          background port-forward + open browser
+#   pmm ui-stop     stop the background port-forward
+#   pmm port-forward  foreground port-forward (localhost:8000)
+#   pmm tunnel      minikube service URL
+#   pmm status      pods + services
+#   pmm logs        web pod logs (-f)
+#   pmm test        unit tests (pytest in .venv)
+#   pmm break-api TARGET    move the API-level bug: json-body|wrong-path|no-auth|bad-amount|none
+#   pmm break-k8s TARGET    move the k8s-level bug: selector|port|probe|scale0|reset
+#   pmm delete      remove all k8s resources + namespace
+#   pmm help        this text
+
+set -euo pipefail
+cd "$(dirname "$0")"
+
+IMAGE="paymemoney:dev"
+NAMESPACE="paymemoney"
+LOCAL_PORT="8000"
+
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+
+cmd="${1:-help}"
+[[ $# -gt 0 ]] && shift
+
+case "$cmd" in
+  deploy)
+    docker build -t "$IMAGE" .
+    minikube image load "$IMAGE"
+    kubectl apply -k k8s
+    # image tag never changes, so restart pods to pick up the new image
+    kubectl rollout restart deployment -n "$NAMESPACE"
+    ;;
+
+  build)  docker build -t "$IMAGE" . ;;
+  load)   minikube image load "$IMAGE" ;;
+
+  secret)
+    # accepts: pmm secret sk_test_xxx   or   pmm secret STRIPE_SECRET_KEY=sk_test_xxx
+    KEY="${1:-${STRIPE_SECRET_KEY:-}}"
+    KEY="${KEY#STRIPE_SECRET_KEY=}"
+    [[ -z "$KEY" ]] && { echo "usage: pmm secret sk_test_xxxxxxxx" >&2; exit 1; }
+    kubectl create secret generic stripe-secret -n "$NAMESPACE" \
+      --from-literal=STRIPE_SECRET_KEY="$KEY" \
+      --dry-run=client -o yaml | kubectl apply -f -
+    kubectl rollout restart deployment/payment deployment/debug-api deployment/debug-k8s -n "$NAMESPACE"
+    ;;
+
+  test)
+    [[ -x .venv/bin/python ]] || /opt/homebrew/bin/python3.15 -m venv .venv
+    .venv/bin/pip install -q -r requirements.txt -r requirements-dev.txt
+    .venv/bin/python -m pytest tests/ -v
+    ;;
+
+  break-api)
+    TARGET="${1:-}"
+    case "$TARGET" in
+      json-body|wrong-path|no-auth|bad-amount|none) ;;
+      *) echo "usage: pmm break-api {json-body|wrong-path|no-auth|bad-amount|none}" >&2; exit 1 ;;
+    esac
+    kubectl set env deployment/debug-api -n "$NAMESPACE" PAY_BREAK="$TARGET"
+    ;;
+
+  break-k8s)
+    TARGET="${1:-}"
+    [[ -z "$TARGET" ]] && { echo "usage: pmm break-k8s {selector|port|probe|scale0|reset}" >&2; exit 1; }
+    ./break-k8s.sh "$TARGET"
+    ;;
+
+  status)   kubectl get pods,svc -n "$NAMESPACE" ;;
+  logs)     kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/name=paymemoney --tail=100 -f ;;
+  tunnel)   minikube service paymemoney -n "$NAMESPACE" ;;
+
+  port-forward)
+    kubectl port-forward -n "$NAMESPACE" svc/paymemoney "$LOCAL_PORT":80
+    ;;
+
+  ui)
+    nohup kubectl port-forward -n "$NAMESPACE" svc/paymemoney "$LOCAL_PORT":80 \
+      >/tmp/paymemoney-portforward.log 2>&1 &
+    sleep 2
+    open "http://localhost:$LOCAL_PORT"
+    echo "opened http://localhost:$LOCAL_PORT — stop the forward with: pmm ui-stop"
+    ;;
+
+  ui-stop)
+    if pkill -f "port-forward.*svc/paymemoney"; then
+      echo "port-forward stopped"
+    else
+      echo "no port-forward running"
+    fi
+    ;;
+
+  delete)
+    kubectl delete -k k8s
+    kubectl delete namespace "$NAMESPACE" --ignore-not-found
+    ;;
+
+  help|--help|-h) usage ;;
+
+  *)
+    echo "unknown command: $cmd" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

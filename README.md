@@ -52,11 +52,11 @@ move the fault around yourself:
 env var (documented in `app/pay.py`):
 
 ```sh
-make break-api TARGET=json-body     # sends JSON instead of form-encoding -> Stripe rejects
-make break-api TARGET=wrong-path    # calls /paymnt_intents (typo) -> Stripe 404
-make break-api TARGET=no-auth       # omits the auth header -> Stripe 401
-make break-api TARGET=bad-amount    # forgets *100 -> $10 charges as 10 cents (silent!)
-make break-api TARGET=none          # heal: debug-api becomes fully healthy
+./pmm break-api json-body     # sends JSON instead of form-encoding -> Stripe rejects
+./pmm break-api wrong-path    # calls /paymnt_intents (typo) -> Stripe 404
+./pmm break-api no-auth       # omits the auth header -> Stripe 401
+./pmm break-api bad-amount    # forgets *100 -> $10 charges as 10 cents (silent!)
+./pmm break-api none          # heal: debug-api becomes fully healthy
 ```
 
 Changing `TARGET` rolls the pod automatically. Troubleshooting path: payment
@@ -64,15 +64,15 @@ fails → `kubectl logs deploy/debug-api` → Stripe's error JSON → compare wi
 what `stripe_post` *should* send → find the `PAY_BREAK` branch.
 
 **`debug K8s`** — cluster-level bugs patched onto the live objects by
-`break-k8s.sh` (the committed manifests stay correct, so `make deploy` always
+`break-k8s.sh` (the committed manifests stay correct, so `./pmm deploy` always
 restores a healthy baseline):
 
 ```sh
-make break-k8s TARGET=selector   # svc selector matches nothing -> 0 endpoints
-make break-k8s TARGET=port       # targetPort 9999 -> endpoints up, conn refused
-make break-k8s TARGET=probe      # probes hit /broken -> CrashLoopBackOff
-make break-k8s TARGET=scale0     # 0 replicas -> no pods at all
-make break-k8s TARGET=reset      # heal everything
+./pmm break-k8s selector   # svc selector matches nothing -> 0 endpoints
+./pmm break-k8s port       # targetPort 9999 -> endpoints up, conn refused
+./pmm break-k8s probe      # probes hit /broken -> CrashLoopBackOff
+./pmm break-k8s scale0     # 0 replicas -> no pods at all
+./pmm break-k8s reset      # heal everything
 ```
 
 Troubleshooting path: payment fails → `kubectl get pods` (Running!) →
@@ -80,7 +80,7 @@ Troubleshooting path: payment fails → `kubectl get pods` (Running!) →
 find which layer is lying.
 
 Note: with an invalid/missing Stripe key, API bugs can be masked — Stripe
-validates the key before the body. Set a real `sk_test_` key (`make secret`)
+validates the key before the body. Set a real `sk_test_` key (`./pmm secret`)
 to see encoding/routing bugs surface distinctly.
 
 **QR** — the payment pod calls `POST /v1/payment_links` with an inline price,
@@ -117,7 +117,7 @@ that is expected, not an error.
 ./setup.sh
 ```
 
-It checks `docker` (Docker Desktop), `minikube`, `kubectl`, `make`, `python3` —
+It checks `docker` (Docker Desktop), `minikube`, `kubectl`, `python3` —
 installs what's missing via brew, upgrades what's outdated, starts Docker Desktop
 if needed, and starts minikube. Safe to re-run anytime (`./setup.sh --no-start`
 skips starting the cluster).
@@ -131,33 +131,33 @@ skips starting the cluster).
 # 2. Inject your Stripe TEST secret key (get one at
 #    https://dashboard.stripe.com/test/apikeys — starts with sk_test_)
 #    The key goes only into the cluster Secret, never into a repo file.
-make secret STRIPE_SECRET_KEY=sk_test_xxxxxxxx
+./pmm secret sk_test_xxxxxxxx
 
 # 2b. Set the PUBLISHABLE key (pk_test_..., same dashboard page) in
 #     k8s/configmap.yaml -> STRIPE_PUBLISHABLE_KEY, needed for card payments.
 
 # 3. Build image, load into minikube, apply manifests, restart pods
-make deploy
+./pmm deploy
 
 # 4. Open the web UI — pick ONE of the options below
 ```
 
 ### Open the web UI
 
-**Option A — `make ui` (easiest, one command):**
+**Option A — `./pmm ui` (easiest, one command):**
 
 ```sh
-make ui
+./pmm ui
 ```
 
 This starts a background port-forward and opens `http://localhost:8000` in your
 browser automatically. The forward keeps running after the command exits —
-stop it later with `make ui-stop`.
+stop it later with `./pmm ui-stop`.
 
 **Option B — port-forward manually (foreground):**
 
 ```sh
-make port-forward
+./pmm port-forward
 ```
 
 Runs `kubectl port-forward` in the **foreground** — leave that terminal
@@ -167,7 +167,7 @@ Press `Ctrl+C` to stop the forward (pods keep running).
 **Option C — minikube service tunnel:**
 
 ```sh
-make tunnel
+./pmm tunnel
 ```
 
 Prints a `http://192.168.x.x:30081` URL (the NodePort on the minikube VM's IP)
@@ -179,8 +179,8 @@ the Payment / Refund / Withdrawal buttons.
 Check everything is healthy:
 
 ```sh
-make status              # kubectl get pods,svc -n paymemoney
-make logs                # tail web pod logs
+./pmm status              # kubectl get pods,svc -n paymemoney
+./pmm logs                # tail web pod logs
 ```
 
 ## Testing the flows
@@ -208,8 +208,8 @@ Currency notes: the UI offers `usd` / `jpy` / `cny` (Chinese Yuan). Amounts are 
 ## Secrets
 
 `k8s/secret.yaml` is a **template only** — it is intentionally excluded from the
-kustomization so `make deploy` can never overwrite a real key with the
-placeholder. Use `make secret` instead (see above).
+kustomization so `./pmm deploy` can never overwrite a real key with the
+placeholder. Use `./pmm secret` instead (see above).
 
 For production, do not commit secrets at all — use an external store:
 
@@ -225,7 +225,7 @@ Also plan to move from the full secret key to a **restricted Stripe key**
 ## Unit tests
 
 ```sh
-make test
+./pmm test
 ```
 
 pytest + FastAPI `TestClient`, no cluster or Stripe key needed. `call_pay` and
@@ -241,21 +241,21 @@ creates `.venv` with Homebrew's python3.
 ## Useful commands
 
 ```sh
-make status          # pods + services
-make logs            # web pod logs (-f)
+./pmm status          # pods + services
+./pmm logs            # web pod logs (-f)
 kubectl logs -n paymemoney -l app.kubernetes.io/name=payment --tail=100 -f  # payment pod
-make port-forward    # localhost:8000 -> web service (foreground)
-make ui              # background port-forward + auto-open browser
-make ui-stop         # stop the background port-forward
-make break-api TARGET=...   # move the API-level bug (see Debug modes)
-make break-k8s TARGET=...   # move the k8s-level bug (see Debug modes)
-make delete          # remove all k8s resources + namespace (cluster keeps running)
+./pmm port-forward    # localhost:8000 -> web service (foreground)
+./pmm ui              # background port-forward + auto-open browser
+./pmm ui-stop         # stop the background port-forward
+./pmm break-api ...   # move the API-level bug (see Debug modes)
+./pmm break-k8s ...   # move the k8s-level bug (see Debug modes)
+./pmm delete          # remove all k8s resources + namespace (cluster keeps running)
 ```
 
 ## Shutdown — turn everything off
 
 ```sh
-make delete          # 1. remove deployments/services/namespace
+./pmm delete          # 1. remove deployments/services/namespace
 minikube stop        # 2. stop the cluster VM
 # 3. quit Docker Desktop (optional)
 ```
@@ -267,7 +267,7 @@ kubectl delete -k k8s && kubectl delete namespace paymemoney --ignore-not-found 
   && minikube stop
 ```
 
-To start again later: `./setup.sh` → `make secret ...` → `make deploy` → `make port-forward`.
+To start again later: `./setup.sh` → `./pmm secret ...` → `./pmm deploy` → `./pmm port-forward`.
 (`minikube stop` preserves the VM disk, so redeploying after a restart is fast.)
 
 ## Project layout
@@ -288,11 +288,11 @@ k8s/
   debug-api-service.yaml      # healthy service -> debug-api pod
   debug-k8s-deployment.yaml   # healthy pod (label debug-k8s)
   debug-k8s-service.yaml      # correct baseline; break-k8s.sh breaks it live
-  secret.yaml        # Secret TEMPLATE (not applied; use `make secret`)
+  secret.yaml        # Secret TEMPLATE (not applied; use `./pmm secret`)
   kustomization.yaml
 Dockerfile           # one image for all pods
 break-k8s.sh         # introduces/heals k8s-level bugs on debug-k8s (live only)
-Makefile             # build/load/deploy/secret/test/break-api/break-k8s/...
+pmm                  # CLI: deploy/secret/test/ui/break-api/break-k8s/...
 setup.sh             # prereq check + install/upgrade + minikube start
 requirements.txt     # runtime deps (fastapi, uvicorn, httpx, segno, python-multipart)
 requirements-dev.txt # pytest — local tests only, not in the image

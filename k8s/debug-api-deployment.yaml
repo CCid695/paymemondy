@@ -32,7 +32,7 @@ spec:
             # *** DEBUG KNOB ***
             # PAY_BREAK selects WHERE the intentional API-level bug lives.
             # Change it without editing this file:
-            #   make break-api TARGET=json-body|wrong-path|no-auth|bad-amount|none
+            #   ./pmm break-api json-body|wrong-path|no-auth|bad-amount|none
             # Options are documented in app/pay.py next to PAY_BREAK.
             - name: PAY_BREAK
               value: "json-body"

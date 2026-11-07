@@ -4,7 +4,7 @@ resources:
   - namespace.yaml
   - configmap.yaml
   # secret.yaml is intentionally NOT here: it is a template only.
-  # Create the real Secret with `make secret STRIPE_SECRET_KEY=sk_...`
+  # Create the real Secret with `./pmm secret sk_...`
   # so the key never lives in a file that can be committed.
   - deployment.yaml
   - service.yaml

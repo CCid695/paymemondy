@@ -16,7 +16,6 @@ START_MINIKUBE=1
 REQUIREMENTS=(
   "minikube|minikube|local kubernetes cluster"
   "kubectl|kubectl|talks to the cluster"
-  "make|make|runs the Makefile targets"
   "python3|python|used for `python3 -m py_compile` sanity checks"
 )
 
@@ -60,7 +59,7 @@ for entry in "${REQUIREMENTS[@]}"; do
   IFS='|' read -r name formula why <<<"$entry"
   if command -v "$name" >/dev/null; then
     # Only brew-upgrade when brew actually owns this install.
-    # (e.g. /usr/bin/make is Apple's — leave it alone.)
+    # (e.g. Apple's system tools — leave them alone.)
     if brew_has "$formula" && brew outdated --quiet "$formula" >/dev/null 2>&1; then
       log "$name is outdated — upgrading ($formula)"
       brew upgrade "$formula"
@@ -90,9 +89,9 @@ cat <<'EOF'
 
 All set. Next steps:
 
-  make secret STRIPE_SECRET_KEY=sk_test_xxxxxxxx   # inject Stripe test key
-  make deploy                                     # build + apply + restart
-  make port-forward                               # then open http://localhost:8000
+  ./pmm secret sk_test_xxxxxxxx   # inject Stripe test key
+  ./pmm deploy                    # build + apply + restart pods
+  ./pmm ui                        # open http://localhost:8000 in your browser
 
-See readme.mk for the full guide (`make -f readme.mk help`).
+See README.md for the full guide (`./pmm help` lists all commands).
 EOF
