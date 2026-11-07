@@ -33,11 +33,15 @@ spec:
                 configMapKeyRef:
                   name: paymemoney-config
                   key: PAYMENT_SERVICE_URL
+            # Publishable key for Stripe.js — lives in the Secret too (not
+            # committed anywhere). optional:true so pods start before it's set;
+            # the card page shows a "not configured" notice instead.
             - name: STRIPE_PUBLISHABLE_KEY
               valueFrom:
-                configMapKeyRef:
-                  name: paymemoney-config
+                secretKeyRef:
+                  name: stripe-secret
                   key: STRIPE_PUBLISHABLE_KEY
+                  optional: true
           livenessProbe:
             httpGet:
               path: /health

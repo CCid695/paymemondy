@@ -11,7 +11,6 @@ data:
   # DNS name of the payment pod's Service (see payment-service.yaml).
   # Kubernetes resolves short names inside the same namespace.
   PAYMENT_SERVICE_URL: "http://payment"
-  # Stripe PUBLISHABLE key (pk_test_...) — public by design, used by Stripe.js
-  # in the browser to tokenize cards. Get it next to the secret key at
-  # https://dashboard.stripe.com/test/apikeys
-  STRIPE_PUBLISHABLE_KEY: "pk_test_REPLACE_ME"
+  # NOTE: no Stripe keys here — both live in the `stripe-secret` Secret,
+  # injected by `./pmm secret` (see k8s/secret.yaml). Nothing key-shaped
+  # is committed to this repo.

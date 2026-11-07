@@ -23,7 +23,7 @@ APP_NAME = os.getenv("APP_NAME", "paymemoney")
 PAY_URL = os.getenv("PAYMENT_SERVICE_URL", "http://payment")
 # Stripe PUBLISHABLE key (pk_test_...) — safe to expose in the browser by design.
 # It only lets Stripe.js tokenize cards; it cannot read data or move money.
-# Comes from the ConfigMap (k8s/configmap.yaml).
+# Comes from the `stripe-secret` k8s Secret (injected via `./pmm secret`).
 STRIPE_PK = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 CURRENCIES = ["usd", "jpy", "cny"]
 

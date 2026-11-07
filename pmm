@@ -2,7 +2,7 @@
 # pmm — paymemoney CLI. Replaces the old Makefile.
 #
 #   pmm deploy      build image -> load into minikube -> apply k8s -> restart pods
-#   pmm secret KEY  inject Stripe secret key (never written to a repo file)
+#   pmm secret sk_... [pk_...]  inject Stripe keys (never written to a repo file)
 #   pmm ui          background port-forward + open browser
 #   pmm ui-stop     stop the background port-forward
 #   pmm port-forward  foreground port-forward (localhost:8000)
@@ -40,14 +40,28 @@ case "$cmd" in
   load)   minikube image load "$IMAGE" ;;
 
   secret)
-    # accepts: pmm secret sk_test_xxx   or   pmm secret STRIPE_SECRET_KEY=sk_test_xxx
-    KEY="${1:-${STRIPE_SECRET_KEY:-}}"
-    KEY="${KEY#STRIPE_SECRET_KEY=}"
-    [[ -z "$KEY" ]] && { echo "usage: pmm secret sk_test_xxxxxxxx" >&2; exit 1; }
+    # accepts any mix of: sk_...  pk_...  STRIPE_SECRET_KEY=..  STRIPE_PUBLISHABLE_KEY=..
+    # e.g.  ./pmm secret sk_test_xxx                 (secret key only)
+    #       ./pmm secret sk_test_xxx pk_test_yyy      (both keys)
+    SK=""; PK=""
+    for a in "$@"; do
+      case "$a" in
+        STRIPE_SECRET_KEY=*)          SK="${a#*=}" ;;
+        STRIPE_PUBLISHABLE_KEY=*)     PK="${a#*=}" ;;
+        sk_*)                         SK="$a" ;;
+        pk_*)                         PK="$a" ;;
+        *) echo "unrecognized arg: $a (want sk_... and/or pk_...)" >&2; exit 1 ;;
+      esac
+    done
+    [[ -z "$SK" && -z "$PK" ]] && { echo "usage: ./pmm secret sk_test_xxx [pk_test_yyy]" >&2; exit 1; }
+    LITERALS=()
+    [[ -n "$SK" ]] && LITERALS+=(--from-literal=STRIPE_SECRET_KEY="$SK")
+    [[ -n "$PK" ]] && LITERALS+=(--from-literal=STRIPE_PUBLISHABLE_KEY="$PK")
     kubectl create secret generic stripe-secret -n "$NAMESPACE" \
-      --from-literal=STRIPE_SECRET_KEY="$KEY" \
-      --dry-run=client -o yaml | kubectl apply -f -
-    kubectl rollout restart deployment/payment deployment/debug-api deployment/debug-k8s -n "$NAMESPACE"
+      "${LITERALS[@]}" --dry-run=client -o yaml | kubectl apply -f -
+    # restart every pod that consumes the secret (web pod uses pk_, pay pods use sk_)
+    kubectl rollout restart deployment/paymemoney deployment/payment \
+      deployment/debug-api deployment/debug-k8s -n "$NAMESPACE"
     ;;
 
   test)

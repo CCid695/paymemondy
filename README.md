@@ -97,11 +97,12 @@ Two keys are involved, on purpose:
 
 | Key | Where it lives | Can do |
 |---|---|---|
-| `pk_test_...` publishable | ConfigMap → browser (public by design) | tokenize cards via Stripe.js only |
-| `sk_test_...` secret | k8s Secret → payment pod only | everything (charges, refunds, transfers) |
+| `pk_test_...` publishable | `stripe-secret` Secret → web pod env → browser (public by design) | tokenize cards via Stripe.js only |
+| `sk_test_...` secret | `stripe-secret` Secret → payment pods only | everything (charges, refunds, transfers, payment links) |
 
-Set the publishable key in `k8s/configmap.yaml` (`STRIPE_PUBLISHABLE_KEY`)
-and redeploy — it's on the same dashboard page as the secret key.
+Both keys are injected with `./pmm secret` — nothing key-shaped is committed
+to the repo (not even the publishable one). Without `pk_`, only the card page
+is affected; everything else works.
 
 **Bank transfer** — collects holder name + US routing/account number;
 creates a `us_bank_account` PaymentMethod. Bank debits are not instant:
@@ -128,13 +129,12 @@ skips starting the cluster).
 # 1. Prerequisites + start minikube
 ./setup.sh
 
-# 2. Inject your Stripe TEST secret key (get one at
-#    https://dashboard.stripe.com/test/apikeys — starts with sk_test_)
-#    The key goes only into the cluster Secret, never into a repo file.
-./pmm secret sk_test_xxxxxxxx
-
-# 2b. Set the PUBLISHABLE key (pk_test_..., same dashboard page) in
-#     k8s/configmap.yaml -> STRIPE_PUBLISHABLE_KEY, needed for card payments.
+# 2. Inject your Stripe TEST keys (get them at
+#    https://dashboard.stripe.com/test/apikeys)
+#    - sk_test_... secret key: required for everything server-side
+#    - pk_test_... publishable key: needed only for card payments (Stripe.js)
+#    Neither is ever written to a repo file — both go into the cluster Secret.
+./pmm secret sk_test_xxxxxxxx pk_test_yyyyyy
 
 # 3. Build image, load into minikube, apply manifests, restart pods
 ./pmm deploy
