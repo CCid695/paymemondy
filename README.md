@@ -190,7 +190,7 @@ Check everything is healthy:
 - **Payment** — enter an amount + currency → **Payment** → pick a method:
   - **QR Code** → get a scannable QR of a real Stripe Payment Link
   - **Credit Card** → Stripe.js Card Element (PCI-safe); test card `4242 4242 4242 4242`, any future exp, any cvc
-  - **Bank Transfer** → routing `110000000`, any account number; expect `requires_action` (bank debits verify asynchronously)
+  - **Bank Transfer** → routing `110000000`, account `000123456789` fixed in the form (Stripe test mode rejects other account numbers); expect `requires_action` (bank debits verify asynchronously)
   
   The result page shows a **request/response transcript** — for every Stripe
   call it renders `sent to Stripe` (exact form fields) and `Stripe responded`

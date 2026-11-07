@@ -313,17 +313,20 @@ def bank_form(amount: float, currency: str, mode: str = "normal") -> HTMLRespons
         f"Pay {amount} {currency.upper()} by bank transfer",
         f"""
         <h1>Bank Transfer</h1>
-        <div class="sub">US bank account. Test: routing 110000000, any account no.</div>
+        <div class="sub">US bank account (ACH debit). Stripe test mode only
+        accepts canned account numbers, so they are fixed — do not edit.</div>
         <form method="post" action="/pay/bank">
           <input type="hidden" name="amount" value="{amount}">
           <input type="hidden" name="currency" value="{currency}">
           <input type="hidden" name="mode" value="{mode}">
+          <input type="hidden" name="routing_number" value="110000000">
+          <input type="hidden" name="account_number" value="000123456789">
           <label>Account holder name</label>
           <input name="name" placeholder="Jane Doe" required>
-          <label>Routing number</label>
-          <input name="routing_number" placeholder="110000000" required>
-          <label>Account number</label>
-          <input name="account_number" placeholder="000123456789" required>
+          <label>Routing number (fixed test value)</label>
+          <input value="110000000" disabled>
+          <label>Account number (fixed test value)</label>
+          <input value="000123456789" disabled>
           <button type="submit">Pay</button>
         </form>
         <a class="btn ghost" href="/pay?amount={amount}&currency={currency}&mode={mode}">Back</a>

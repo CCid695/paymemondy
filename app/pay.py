@@ -269,7 +269,9 @@ def pay_bank(req: BankPayRequest) -> dict:
     """Initiate a US bank-account (ACH-style) payment.
 
     Step 1: POST /v1/payment_methods with type=us_bank_account.
-    Test values that Stripe accepts: routing 110000000, any account number.
+    Test values Stripe accepts: routing 110000000 + account 000123456789
+    (test mode only allows Stripe's canned account numbers — arbitrary ones
+    are rejected with payment_method_invalid_parameter_testmode).
 
     Step 2: confirm a PaymentIntent allowing us_bank_account.
     Unlike a card, a bank debit is NOT instant — Stripe responds with
