@@ -8,7 +8,8 @@
 #   pmm port-forward  foreground port-forward (localhost:8000)
 #   pmm tunnel      minikube service URL
 #   pmm status      pods + services
-#   pmm logs        web pod logs (-f)
+#   pmm logs [comp]  tail logs (-f); comp = paymemoney|payment|debug-api|debug-k8s (default: all)
+#   pmm logs-save    dump all pod logs into ./logs/<timestamp>/
 #   pmm test        unit tests (pytest in .venv)
 #   pmm break-api TARGET    move the API-level bug: json-body|wrong-path|no-auth|bad-amount|none
 #   pmm break-k8s TARGET    move the k8s-level bug: selector|port|probe|scale0|reset
@@ -92,7 +93,32 @@ case "$cmd" in
     ;;
 
   status)   kubectl get pods,svc -n "$NAMESPACE" ;;
-  logs)     kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/name=paymemoney --tail=100 -f ;;
+  logs)
+    # pmm logs            -> tail ALL app pods, prefixed by pod name
+    # pmm logs payment    -> tail just that component (paymemoney|payment|debug-api|debug-k8s)
+    target="${1:-all}"
+    if [[ "$target" == "all" ]]; then
+      for d in paymemoney payment debug-api debug-k8s; do
+        kubectl logs -n "$NAMESPACE" -l "app.kubernetes.io/name=$d" \
+          --tail=50 --prefix -f &
+      done
+      wait
+    else
+      kubectl logs -n "$NAMESPACE" -l "app.kubernetes.io/name=$target" \
+        --tail=100 -f
+    fi
+    ;;
+
+  logs-save)
+    # dump current logs of every pod into ./logs/<timestamp>/ for offline reading
+    dir="logs/$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$dir"
+    for d in paymemoney payment debug-api debug-k8s; do
+      kubectl logs -n "$NAMESPACE" -l "app.kubernetes.io/name=$d" \
+        --tail=1000 --prefix > "$dir/$d.log" 2>&1 || true
+    done
+    echo "saved to $dir/"
+    ;;
   tunnel)   minikube service paymemoney -n "$NAMESPACE" ;;
 
   port-forward)

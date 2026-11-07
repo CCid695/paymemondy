@@ -180,7 +180,9 @@ Check everything is healthy:
 
 ```sh
 ./pmm status              # kubectl get pods,svc -n paymemoney
-./pmm logs                # tail web pod logs
+./pmm logs                # tail ALL pod logs (-f, prefixed by pod)
+./pmm logs payment        # tail just the payment pods
+./pmm logs-save           # dump all logs into ./logs/<timestamp>/
 ```
 
 ## Testing the flows
@@ -242,8 +244,8 @@ creates `.venv` with Homebrew's python3.
 
 ```sh
 ./pmm status          # pods + services
-./pmm logs            # web pod logs (-f)
-kubectl logs -n paymemoney -l app.kubernetes.io/name=payment --tail=100 -f  # payment pod
+./pmm logs            # all pod logs (-f); `./pmm logs payment` for one component
+./pmm logs-save       # save all pod logs to ./logs/<timestamp>/
 ./pmm port-forward    # localhost:8000 -> web service (foreground)
 ./pmm ui              # background port-forward + auto-open browser
 ./pmm ui-stop         # stop the background port-forward
