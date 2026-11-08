@@ -25,6 +25,9 @@ PAY_URL = os.getenv("PAYMENT_SERVICE_URL", "http://payment")
 # It only lets Stripe.js tokenize cards; it cannot read data or move money.
 # Comes from the `stripe-secret` k8s Secret (injected via `./pmm secret`).
 STRIPE_PK = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+# Debug controller pod — the "Deploy" button on the drilldown page POSTs here;
+# it picks a random fault and redeploys/patches the chosen debug backend.
+DEBUG_CTL = os.getenv("DEBUG_CTL_URL", "http://debug-ctl")
 CURRENCIES = ["usd", "jpy", "cny"]
 
 # Debug modes -> which payment backend the web pod calls.
@@ -99,6 +102,15 @@ def call_pay(path: str, payload: dict, mode: str = "normal") -> dict:
         return resp.json()
     except httpx.HTTPError as e:
         return {"error": f"cannot reach payment backend {url}: {e}"}
+
+
+def call_ctl(mode: str) -> dict:
+    """Ask the debug-ctl pod to deploy a RANDOM fault for the chosen mode."""
+    try:
+        resp = httpx.post(f"{DEBUG_CTL}/deploy", params={"mode": mode}, timeout=30)
+        return resp.json()
+    except httpx.HTTPError as e:
+        return {"error": f"cannot reach debug controller {DEBUG_CTL}: {e}"}
 
 
 def qr_data_uri(text: str) -> str:
@@ -211,9 +223,20 @@ def pay_methods(amount: float, currency: str, mode: str = "normal") -> HTMLRespo
         f'<input type="hidden" name="mode" value="{mode}">'
     )
     hint = ""
+    deploy_btn = ""
     if mode != "normal":
         hint = (f'<div class="sub" style="color:#b45309">Mode: <b>{MODE_LABELS.get(mode, mode)}</b> — '
                 'this backend is intentionally broken for troubleshooting practice.</div>')
+        # "Deploy" asks the debug-ctl pod to inject a RANDOM fault and
+        # redeploy/patch the backend — no CLI needed. amount/currency/mode are
+        # carried through so you land back on this same drilldown page.
+        deploy_btn = f"""
+        <form method="post" action="/debug/deploy" style="margin-top:12px">
+          <input type="hidden" name="amount" value="{amount}">
+          <input type="hidden" name="currency" value="{currency}">
+          <input type="hidden" name="mode" value="{mode}">
+          <button type="submit" class="btn ghost">Deploy debug backend (random fault)</button>
+        </form>"""
     body = f"""
         <h1>Pay {amount} {currency.upper()}</h1>
         <div class="sub">Choose a payment method</div>
@@ -223,9 +246,34 @@ def pay_methods(amount: float, currency: str, mode: str = "normal") -> HTMLRespo
             <button type="submit">QR Code</button></form>
           <a class="btn" href="/pay/card?amount={amount}&currency={currency}&mode={mode}">Credit Card</a>
         </div>
+        {deploy_btn}
         <a class="btn ghost" href="/">Back</a>
         """
     return page("Choose payment method", body)
+
+
+@app.post("/debug/deploy", response_class=HTMLResponse)
+def debug_deploy(
+    amount: float = Form(...), currency: str = Form(...), mode: str = Form(...),
+) -> HTMLResponse:
+    """Deploy button: ask debug-ctl to inject a random fault for `mode`."""
+    import json
+    result = call_ctl(mode)
+    scenario = result.get("scenario", "?")
+    detail = result.get("detail", result.get("error", ""))
+    body = f"""
+        <h1>Debug backend deployed</h1>
+        <p class="ok">Mode <b>{MODE_LABELS.get(mode, mode)}</b> — injected fault:
+        <b>{scenario}</b></p>
+        <div class="sub">{detail}</div>
+        <p class="sub">Give the rollout a few seconds, then try a payment —
+        the result page shows exactly what Stripe received and replied.</p>
+        <a class="btn" href="/pay?amount={amount}&currency={currency}&mode={mode}">Back to payment methods</a>
+        <a class="btn ghost" href="/">Home</a>
+        <h2>debug-ctl response</h2>
+        <pre>{json.dumps(result, indent=2)}</pre>
+        """
+    return page("Debug deploy", body)
 
 
 @app.post("/pay/qr", response_class=HTMLResponse)

@@ -14,3 +14,6 @@ resources:
   - debug-api-service.yaml
   - debug-k8s-deployment.yaml
   - debug-k8s-service.yaml
+  - rbac.yaml
+  - debug-ctl-deployment.yaml
+  - debug-ctl-service.yaml

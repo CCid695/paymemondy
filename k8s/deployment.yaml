@@ -33,6 +33,11 @@ spec:
                 configMapKeyRef:
                   name: paymemoney-config
                   key: PAYMENT_SERVICE_URL
+            - name: DEBUG_CTL_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: paymemoney-config
+                  key: DEBUG_CTL_URL
             # Publishable key for Stripe.js — lives in the Secret too (not
             # committed anywhere). optional:true so pods start before it's set;
             # the card page shows a "not configured" notice instead.

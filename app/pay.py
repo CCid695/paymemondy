@@ -45,7 +45,7 @@ STRIPE_API = "https://api.stripe.com/v1"
 TRANSFER_DESTINATION = os.getenv("STRIPE_TRANSFER_DESTINATION", "")
 
 # DEBUG KNOB — only non-empty on the `debug-api` pod
-# (see k8s/debug-api-deployment.yaml and `./pmm break-api ...`).
+# (see k8s/debug-api-deployment.yaml — set randomly by the debug-ctl pod).
 # Pick WHERE the API-level bug lives; "" means healthy.
 #   ""           -> normal, everything works
 #   "json-body"  -> stripe_post sends json= instead of form-encoded data=

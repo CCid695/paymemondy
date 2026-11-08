@@ -11,8 +11,6 @@
 #   pmm logs [comp]  tail logs (-f); comp = paymemoney|payment|debug-api|debug-k8s (default: all)
 #   pmm logs-save    dump all pod logs into ./logs/<timestamp>/
 #   pmm test        unit tests (pytest in .venv)
-#   pmm break-api TARGET    move the API-level bug: json-body|wrong-path|no-auth|bad-amount|none
-#   pmm break-k8s TARGET    move the k8s-level bug: selector|port|probe|scale0|reset
 #   pmm delete      remove all k8s resources + namespace
 #   pmm help        this text
 
@@ -77,28 +75,13 @@ case "$cmd" in
     .venv/bin/python -m pytest tests/ -v
     ;;
 
-  break-api)
-    TARGET="${1:-}"
-    case "$TARGET" in
-      json-body|wrong-path|no-auth|bad-amount|none) ;;
-      *) echo "usage: pmm break-api {json-body|wrong-path|no-auth|bad-amount|none}" >&2; exit 1 ;;
-    esac
-    kubectl set env deployment/debug-api -n "$NAMESPACE" PAY_BREAK="$TARGET"
-    ;;
-
-  break-k8s)
-    TARGET="${1:-}"
-    [[ -z "$TARGET" ]] && { echo "usage: pmm break-k8s {selector|port|probe|scale0|reset}" >&2; exit 1; }
-    ./break-k8s.sh "$TARGET"
-    ;;
-
   status)   kubectl get pods,svc -n "$NAMESPACE" ;;
   logs)
     # pmm logs            -> tail ALL app pods, prefixed by pod name
-    # pmm logs payment    -> tail just that component (paymemoney|payment|debug-api|debug-k8s)
+    # pmm logs payment    -> tail just that component (paymemoney|payment|debug-api|debug-k8s|debug-ctl)
     target="${1:-all}"
     if [[ "$target" == "all" ]]; then
-      for d in paymemoney payment debug-api debug-k8s; do
+      for d in paymemoney payment debug-api debug-k8s debug-ctl; do
         kubectl logs -n "$NAMESPACE" -l "app.kubernetes.io/name=$d" \
           --tail=50 --prefix -f &
       done
@@ -113,7 +96,7 @@ case "$cmd" in
     # dump current logs of every pod into ./logs/<timestamp>/ for offline reading
     dir="logs/$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$dir"
-    for d in paymemoney payment debug-api debug-k8s; do
+    for d in paymemoney payment debug-api debug-k8s debug-ctl; do
       kubectl logs -n "$NAMESPACE" -l "app.kubernetes.io/name=$d" \
         --tail=1000 --prefix > "$dir/$d.log" 2>&1 || true
     done

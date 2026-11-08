@@ -36,9 +36,9 @@ spec:
                   key: STRIPE_TRANSFER_DESTINATION
             # *** DEBUG KNOB ***
             # PAY_BREAK selects WHERE the intentional API-level bug lives.
-            # Change it without editing this file:
-            #   ./pmm break-api json-body|wrong-path|no-auth|bad-amount|none
-            # Options are documented in app/pay.py next to PAY_BREAK.
+            # The debug-ctl pod picks it at RANDOM when you click "Deploy"
+            # on the drilldown page (see app/debugctl.py). Options are
+            # documented in app/pay.py next to PAY_BREAK.
             - name: PAY_BREAK
               value: "json-body"
           livenessProbe:

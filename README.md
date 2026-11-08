@@ -15,7 +15,9 @@ Python/FastAPI backend, Stripe as the payment provider via its REST API.
 
    debug backends (selected via the Mode dropdown on /):
    debug-api pod  -> same code, PAY_BREAK env injects an API-level bug
-   debug-k8s pod  -> healthy pod, break-k8s.sh breaks its Service live
+   debug-k8s pod  -> healthy pod; debug-ctl patches its Service/Deploy live
+   debug-ctl pod  -> the "Deploy" button backend: picks a RANDOM fault
+                     and applies it via the K8s API (RBAC in k8s/rbac.yaml)
 ```
 
 - **`app/main.py`** — web pod. Serves the pages (incl. Stripe.js card
@@ -44,38 +46,43 @@ Python/FastAPI backend, Stripe as the payment provider via its REST API.
 
 The entry page has a **Mode** dropdown: `normal` (default), `debug API`,
 `debug K8s`. The choice follows you through the whole payment flow and picks
-which backend pod the web pod calls. **Neither mode has a fixed bug** — you
-move the fault around yourself:
+which backend pod the web pod calls.
 
-**`debug API`** — API-level bugs inside the pod, selected by the `PAY_BREAK`
-env var (documented in `app/pay.py`):
+On the payment-method page (`/pay`) a **"Deploy debug backend"** button
+appears for debug modes. Clicking it asks the `debug-ctl` pod to pick a
+**random** fault and apply it — no CLI needed, and you can re-roll forever.
+The page tells you which scenario was injected; then pick a method and pay
+to see it fail.
 
-```sh
-./pmm break-api json-body     # sends JSON instead of form-encoding -> Stripe rejects
-./pmm break-api wrong-path    # calls /paymnt_intents (typo) -> Stripe 404
-./pmm break-api no-auth       # omits the auth header -> Stripe 401
-./pmm break-api bad-amount    # forgets *100 -> $10 charges as 10 cents (silent!)
-./pmm break-api none          # heal: debug-api becomes fully healthy
-```
+**`debug API`** — the ctl pod sets a random `PAY_BREAK` on the debug-api
+deployment (branches documented in `app/pay.py`):
 
-Changing `TARGET` rolls the pod automatically. Troubleshooting path: payment
-fails → `kubectl logs deploy/debug-api` → Stripe's error JSON → compare with
-what `stripe_post` *should* send → find the `PAY_BREAK` branch.
+| Scenario | What breaks |
+|---|---|
+| `json-body` | sends JSON instead of form-encoding → Stripe rejects |
+| `wrong-path` | calls `/paymnt_intents` (typo) → Stripe 404 |
+| `no-auth` | omits the auth header → Stripe 401 |
+| `bad-amount` | forgets ×100 → $10 charges as 10 cents (**silent**) |
+| `none` | healed — debug-api works normally |
 
-**`debug K8s`** — cluster-level bugs patched onto the live objects by
-`break-k8s.sh` (the committed manifests stay correct, so `./pmm deploy` always
-restores a healthy baseline):
+Troubleshooting path: payment fails → result page shows Stripe's error →
+`./pmm logs debug-api` or `kubectl logs deploy/debug-api` → compare with what
+`stripe_post` *should* send → find the `PAY_BREAK` branch.
 
-```sh
-./pmm break-k8s selector   # svc selector matches nothing -> 0 endpoints
-./pmm break-k8s port       # targetPort 9999 -> endpoints up, conn refused
-./pmm break-k8s probe      # probes hit /broken -> CrashLoopBackOff
-./pmm break-k8s scale0     # 0 replicas -> no pods at all
-./pmm break-k8s reset      # heal everything
-```
+**`debug K8s`** — the ctl pod patches the *live* debug-k8s Service/Deployment
+(the committed manifests stay correct, so `./pmm deploy` restores a healthy
+baseline):
 
-Troubleshooting path: payment fails → `kubectl get pods` (Running!) →
-`kubectl get svc` → `kubectl get endpoints debug-k8s` → `kubectl describe` →
+| Scenario | What breaks |
+|---|---|
+| `selector` | svc selector matches nothing → 0 endpoints |
+| `port` | targetPort 9999 → endpoints up, conn refused |
+| `probe` | probes hit `/broken` → CrashLoopBackOff |
+| `scale0` | 0 replicas → no pods at all |
+| `reset` | healed — everything restored |
+
+Troubleshooting path: payment fails → `./pmm status` (pod Running!) →
+`kubectl get svc/endpoints debug-k8s -n paymemoney` → `kubectl describe` →
 find which layer is lying.
 
 Note: with an invalid/missing Stripe key, API bugs can be masked — Stripe
@@ -247,8 +254,6 @@ creates `.venv` with Homebrew's python3.
 ./pmm port-forward    # localhost:8000 -> web service (foreground)
 ./pmm ui              # background port-forward + auto-open browser
 ./pmm ui-stop         # stop the background port-forward
-./pmm break-api ...   # move the API-level bug (see Debug modes)
-./pmm break-k8s ...   # move the k8s-level bug (see Debug modes)
 ./pmm delete          # remove all k8s resources + namespace (cluster keeps running)
 ```
 
@@ -287,12 +292,14 @@ k8s/
   debug-api-deployment.yaml   # debug pod: PAY_BREAK env picks the API bug
   debug-api-service.yaml      # healthy service -> debug-api pod
   debug-k8s-deployment.yaml   # healthy pod (label debug-k8s)
-  debug-k8s-service.yaml      # correct baseline; break-k8s.sh breaks it live
-  secret.yaml        # Secret TEMPLATE (not applied; use `./pmm secret`)
+  debug-k8s-service.yaml      # correct baseline; debug-ctl patches it live
+  rbac.yaml           # ServiceAccount + Role for debug-ctl
+  debug-ctl-deployment.yaml   # debug pod: picks random faults, patches cluster
+  debug-ctl-service.yaml      # ClusterIP service "debug-ctl"
+  secret.yaml         # Secret TEMPLATE (not applied; use `./pmm secret`)
   kustomization.yaml
 Dockerfile           # one image for all pods
-break-k8s.sh         # introduces/heals k8s-level bugs on debug-k8s (live only)
-pmm                  # CLI: deploy/secret/test/ui/break-api/break-k8s/...
+pmm                  # CLI: deploy/secret/test/ui/logs/...
 setup.sh             # prereq check + install/upgrade + minikube start
 requirements.txt     # runtime deps (fastapi, uvicorn, httpx, segno, python-multipart)
 requirements-dev.txt # pytest — local tests only, not in the image

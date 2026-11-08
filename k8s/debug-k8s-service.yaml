@@ -9,10 +9,9 @@ spec:
   type: ClusterIP
   selector:
     # This file is the CORRECT config — the pod label is `debug-k8s`.
-    # K8s-level bugs are introduced on the LIVE cluster by `break-k8s.sh`
-    # (`./pmm break-k8s ...`), never committed here, so `./pmm deploy`
-    # always restores a healthy baseline and `./pmm break-k8s reset`
-    # heals whatever you broke.
+    # K8s-level bugs are injected on the LIVE cluster by the debug-ctl pod
+    # (the "Deploy" button in the web UI, see app/debugctl.py), never
+    # committed here, so `./pmm deploy` always restores a healthy baseline.
     app.kubernetes.io/name: debug-k8s
   ports:
     - name: http

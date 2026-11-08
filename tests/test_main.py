@@ -38,6 +38,26 @@ def test_pay_drilldown_in_debug_mode_shows_hint_and_carries_mode():
     assert "intentionally broken" in html
     assert 'name="mode" value="debug-k8s"' in html
     assert "mode=debug-k8s" in html  # carried into card links
+    assert 'action="/debug/deploy"' in html  # Deploy button present
+
+
+def test_pay_drilldown_normal_mode_has_no_deploy_button():
+    html = client.get("/pay?amount=10&currency=usd&mode=normal").text
+    assert "/debug/deploy" not in html
+
+
+def test_debug_deploy_proxies_to_ctl(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        main_mod, "call_ctl",
+        lambda mode: captured.update(mode=mode) or {"mode": mode, "scenario": "wrong-path"},
+    )
+    resp = client.post("/debug/deploy", data={
+        "amount": "10", "currency": "usd", "mode": "debug-api",
+    })
+    assert captured["mode"] == "debug-api"
+    assert "wrong-path" in resp.text
+    assert "/pay?amount=10.0&currency=usd&mode=debug-api" in resp.text
 
 
 def test_qr_pay_passes_mode_to_backend(monkeypatch):

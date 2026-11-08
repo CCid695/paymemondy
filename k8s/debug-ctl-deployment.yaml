@@ -1,0 +1,39 @@
+# debug-ctl — tiny controller pod behind the web UI's "Deploy" button.
+# It picks a RANDOM fault and patches the debug backends via the K8s API
+# (see app/debugctl.py). No secrets — only needs its ServiceAccount token.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: debug-ctl
+  namespace: paymemoney
+  labels:
+    app.kubernetes.io/name: debug-ctl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: debug-ctl
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: debug-ctl
+    spec:
+      serviceAccountName: debug-ctl
+      containers:
+        - name: debug-ctl
+          image: paymemoney:dev
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "app.debugctl:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - name: http
+              containerPort: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3

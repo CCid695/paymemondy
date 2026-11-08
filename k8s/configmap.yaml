@@ -11,6 +11,9 @@ data:
   # DNS name of the payment pod's Service (see payment-service.yaml).
   # Kubernetes resolves short names inside the same namespace.
   PAYMENT_SERVICE_URL: "http://payment"
+  # Debug controller — the web UI's "Deploy" button POSTs here; it picks a
+  # random fault and patches the debug backends (see app/debugctl.py).
+  DEBUG_CTL_URL: "http://debug-ctl"
   # NOTE: no Stripe keys here — both live in the `stripe-secret` Secret,
   # injected by `./pmm secret` (see k8s/secret.yaml). Nothing key-shaped
   # is committed to this repo.
